@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { prompt, resolution = "720p", sampleCount = 1 } = req.body;
+    const { prompt, type = "video", resolution = "720p", sampleCount = 1 } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ error: "Missing prompt" });
@@ -19,17 +19,35 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing environment variables" });
     }
 
-    const veoUrl = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/veo-3.0-generate-preview:predictLongRunning?key=${apiKey}`;
+    let url = "";
+    let body = {};
 
-    const response = await fetch(veoUrl, {
+    if (type === "video") {
+      url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/veo-3.0-generate-preview:predictLongRunning?key=${apiKey}`;
+      body = {
+        instances: [{ prompt }],
+        parameters: { resolution, sampleCount }
+      };
+    } else if (type === "text") {
+      url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
+      body = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }]
+          }
+        ]
+      };
+    } else {
+      return res.status(400).json({ error: "Invalid type" });
+    }
+
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        instances: [{ prompt }],
-        parameters: { resolution, sampleCount }
-      })
+      body: JSON.stringify(body)
     });
 
     const data = await response.json();
