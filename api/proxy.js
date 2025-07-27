@@ -15,6 +15,10 @@ export default async function handler(req, res) {
     const apiKey = process.env.GEMINI_API_KEY;
     const projectId = process.env.GOOGLE_PROJECT_ID;
 
+    if (!apiKey || !projectId) {
+      return res.status(500).json({ error: "Missing environment variables" });
+    }
+
     const veoUrl = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/veo-3.0-generate-preview:predictLongRunning?key=${apiKey}`;
 
     const response = await fetch(veoUrl, {
