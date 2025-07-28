@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+import { GoogleAuth } from "google-auth-library";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -6,45 +6,24 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { prompt, type = "video", resolution = "720p", sampleCount = 1 } = req.body;
+    const { endpoint, body } = req.body;
 
-    if (!prompt) {
-      return res.status(400).json({ error: "Missing prompt" });
+    if (!endpoint || !body) {
+      return res.status(400).json({ error: "Missing endpoint or body" });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const projectId = process.env.GOOGLE_PROJECT_ID;
+    const auth = new GoogleAuth({
+      credentials: JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY),
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
 
-    if (!apiKey || !projectId) {
-      return res.status(500).json({ error: "Missing environment variables" });
-    }
+    const client = await auth.getClient();
+    const token = await client.getAccessToken();
 
-    let url = "";
-    let body = {};
-
-    if (type === "video") {
-      url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/veo-3.0-generate-preview:predictLongRunning?key=${apiKey}`;
-      body = {
-        instances: [{ prompt }],
-        parameters: { resolution, sampleCount }
-      };
-    } else if (type === "text") {
-      url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
-      body = {
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }]
-          }
-        ]
-      };
-    } else {
-      return res.status(400).json({ error: "Invalid type" });
-    }
-
-    const response = await fetch(url, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
+        "Authorization": `Bearer ${token.token}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(body)
@@ -53,15 +32,12 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
-      return res.status(response.status).json({
-        error: "Google API Error",
-        details: data
-      });
+      return res.status(response.status).json({ error: "Vertex API error", details: data });
     }
 
-    return res.status(200).json(data);
-  } catch (error) {
-    console.error("Proxy Error:", error);
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    res.status(200).json(data);
+  } catch (err) {
+    console.error("Proxy error:", err);
+    res.status(500).json({ error: "Internal Server Error", details: err.message });
   }
 }
